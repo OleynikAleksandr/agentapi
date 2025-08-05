@@ -27,6 +27,14 @@ This fork includes critical modifications to support Permission Mode tracking in
 }
 ```
 
+## Download
+
+Download pre-built binaries from the [latest release](https://github.com/OleynikAleksandr/agentapi/releases/tag/v1.0.0-ccs):
+- macOS Intel: `agentapi-darwin-amd64`
+- macOS Apple Silicon: `agentapi-darwin-arm64`
+- Linux: `agentapi-linux-amd64`
+- Windows: `agentapi-windows-amd64.exe`
+
 ## Building from Source
 
 1. Install Go 1.20 or later
@@ -36,11 +44,7 @@ This fork includes critical modifications to support Permission Mode tracking in
    ./build-release.sh
    ```
 
-This will create binaries in the `dist/` directory for:
-- macOS Intel (darwin-amd64)
-- macOS Apple Silicon (darwin-arm64)
-- Linux (linux-amd64)
-- Windows (windows-amd64)
+This will create binaries in the `dist/` directory
 
 ## Usage
 
