@@ -242,3 +242,9 @@ func FormatAgentMessage(agentType AgentType, message string, userInput string) s
 		return message
 	}
 }
+
+// GetRawTerminalOutput returns the terminal output without formatting
+// but with message box removed, preserving permission mode
+func GetRawTerminalOutput(msg string) string {
+	return removeMessageBox(msg)
+}

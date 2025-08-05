@@ -35,14 +35,16 @@ type Message struct {
 // StatusResponse represents the server status
 type StatusResponse struct {
 	Body struct {
-		Status AgentStatus `json:"status" doc:"Current agent status. 'running' means that the agent is processing a message, 'stable' means that the agent is idle and waiting for input."`
+		Status         AgentStatus `json:"status" doc:"Current agent status. 'running' means that the agent is processing a message, 'stable' means that the agent is idle and waiting for input."`
+		PermissionMode string      `json:"permissionMode,omitempty" doc:"Current permission mode of the agent (e.g., 'Bypassing Permissions', 'plan mode on', 'auto-accept edits on', 'Normal mode')"`
 	}
 }
 
 // MessagesResponse represents the list of messages
 type MessagesResponse struct {
 	Body struct {
-		Messages []Message `json:"messages" nullable:"false" doc:"List of messages"`
+		Messages       []Message `json:"messages" nullable:"false" doc:"List of messages"`
+		PermissionMode string    `json:"permissionMode,omitempty" doc:"Current permission mode of the agent"`
 	}
 }
 

@@ -7,6 +7,12 @@ schema.yaml
 **/.claude/settings.local.json
 out
 
+# Build outputs
+dist/
+agentapi-custom
+agentapi-darwin-*
+agentapi-linux-*
+agentapi-windows-*
 
 #IDEs
 .idea

@@ -40,16 +40,45 @@ func findGenericSlimMessageBox(lines []string) int {
 func removeMessageBox(msg string) string {
 	lines := strings.Split(msg, "\n")
 
-	messageBoxStartIdx := findGreaterThanMessageBox(lines)
-	if messageBoxStartIdx == -1 {
-		messageBoxStartIdx = findGenericSlimMessageBox(lines)
+	// Find the message box with ">"
+	greaterThanIdx := -1
+	for i := len(lines) - 1; i >= max(len(lines)-6, 0); i-- {
+		if strings.Contains(lines[i], ">") {
+			greaterThanIdx = i
+			break
+		}
 	}
 
-	if messageBoxStartIdx != -1 {
-		lines = lines[:messageBoxStartIdx]
+	if greaterThanIdx == -1 {
+		// If no ">" found, try other message box types
+		messageBoxStartIdx := findGenericSlimMessageBox(lines)
+		if messageBoxStartIdx != -1 {
+			lines = lines[:messageBoxStartIdx]
+		}
+		return strings.Join(lines, "\n")
 	}
 
-	return strings.Join(lines, "\n")
+	// Remove only the message box itself (3 lines max: line above >, line with >, line below >)
+	startIdx := greaterThanIdx - 1 // Line above ">" (usually "───────────────")
+	endIdx := greaterThanIdx + 1   // Line below ">" (usually "───────────────")
+
+	// Check boundaries
+	if startIdx < 0 {
+		startIdx = 0
+	}
+	if endIdx >= len(lines) {
+		endIdx = len(lines) - 1
+	}
+
+	// Build result excluding only the message box lines
+	var result []string
+	result = append(result, lines[:startIdx]...)
+	if endIdx < len(lines)-1 {
+		// Keep everything after the message box, including Permission Mode
+		result = append(result, lines[endIdx+1:]...)
+	}
+
+	return strings.Join(result, "\n")
 }
 
 func removeCodexMessageBox(msg string) string {
