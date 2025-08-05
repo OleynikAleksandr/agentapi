@@ -29,7 +29,7 @@ This fork includes critical modifications to support Permission Mode tracking in
 
 ## Download
 
-Download pre-built binaries from the [latest release](https://github.com/OleynikAleksandr/agentapi/releases/tag/v1.0.0-ccs):
+Download pre-built binaries from the [latest release](https://github.com/OleynikAleksandr/agentapi/releases/latest):
 - macOS Intel: `agentapi-darwin-amd64`
 - macOS Apple Silicon: `agentapi-darwin-arm64`
 - Linux: `agentapi-linux-amd64`
