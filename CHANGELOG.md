@@ -2,6 +2,18 @@
 
 All notable changes to this custom AgentAPI fork will be documented in this file.
 
+## [v1.0.1-ccs] - 2025-08-05
+
+### Fixed
+- **Permission Mode Detection**: Fixed "Bypassing Permissions" detection
+  - Now correctly detects when mode appears at the end of status line
+  - Increased search range from 5 to 10 lines for better reliability
+  - Uses `strings.Contains` instead of regex for more robust matching
+
+### Changed
+- Improved `ExtractPermissionMode` function to handle different line formats
+- Status line format support: `? for shortcuts                    Bypassing Permissions`
+
 ## [v1.0.0-ccs] - 2025-08-05
 
 ### Added
