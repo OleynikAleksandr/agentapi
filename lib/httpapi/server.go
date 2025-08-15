@@ -181,11 +181,6 @@ func (s *Server) getStatus(ctx context.Context, input *struct{}) (*StatusRespons
 	resp := &StatusResponse{}
 	resp.Body.Status = agentStatus
 
-	// Extract permission mode from current screen
-	screen := s.conversation.Screen()
-	if screen != "" {
-		resp.Body.PermissionMode = mf.ExtractPermissionMode(screen)
-	}
 
 	return resp, nil
 }
@@ -206,11 +201,6 @@ func (s *Server) getMessages(ctx context.Context, input *struct{}) (*MessagesRes
 		}
 	}
 
-	// Extract permission mode from current screen
-	screen := s.conversation.Screen()
-	if screen != "" {
-		resp.Body.PermissionMode = mf.ExtractPermissionMode(screen)
-	}
 
 	return resp, nil
 }

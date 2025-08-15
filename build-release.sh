@@ -3,9 +3,9 @@
 # Build script for custom AgentAPI (Claude Code Studio version)
 
 echo "Building custom AgentAPI for Claude Code Studio..."
-echo "This build includes Permission Mode extraction"
+echo "This build includes PTY with 160 columns width by default"
 
-VERSION="v1.0.0-ccs"
+VERSION="v1.1.0-ccs"
 mkdir -p dist
 
 # macOS Intel
@@ -31,6 +31,7 @@ ls -la dist/
 
 echo ""
 echo "Features in this custom build:"
-echo "- Permission Mode extraction in API responses"
+echo "- PTY terminal width set to 160 columns by default"
 echo "- Message box parsing preserves status lines"
 echo "- UI removed for smaller binary size"
+echo "- Permission Mode parser removed (handled by extension)"

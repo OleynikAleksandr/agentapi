@@ -158,6 +158,6 @@ func init() {
 	ServerCmd.Flags().IntVarP(&port, "port", "p", 3284, "Port to run the server on")
 	ServerCmd.Flags().BoolVarP(&printOpenAPI, "print-openapi", "P", false, "Print the OpenAPI schema to stdout and exit")
 	ServerCmd.Flags().StringVarP(&chatBasePath, "chat-base-path", "c", "/chat", "Base path for assets and routes used in the static files of the chat interface")
-	ServerCmd.Flags().Uint16VarP(&termWidth, "term-width", "W", 80, "Width of the emulated terminal")
+	ServerCmd.Flags().Uint16VarP(&termWidth, "term-width", "W", 160, "Width of the emulated terminal")
 	ServerCmd.Flags().Uint16VarP(&termHeight, "term-height", "H", 1000, "Height of the emulated terminal")
 }
