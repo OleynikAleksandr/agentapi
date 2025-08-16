@@ -211,15 +211,15 @@ const (
 
 func formatGenericMessage(message string, userInput string) string {
 	message = RemoveUserInput(message, userInput)
-	message = removeMessageBox(message)
+	// message = removeMessageBox(message) // DISABLED: Keep message box for raw terminal view
 	message = trimEmptyLines(message)
 	return message
 }
 
 func formatCodexMessage(message string, userInput string) string {
 	message = RemoveUserInput(message, userInput)
-	message = removeMessageBox(message)
-	message = removeCodexMessageBox(message)
+	// message = removeMessageBox(message) // DISABLED: Keep message box for raw terminal view
+	// message = removeCodexMessageBox(message) // DISABLED: Keep message box for raw terminal view
 	message = trimEmptyLines(message)
 	return message
 }
@@ -244,7 +244,8 @@ func FormatAgentMessage(agentType AgentType, message string, userInput string) s
 }
 
 // GetRawTerminalOutput returns the terminal output without formatting
-// but with message box removed, preserving permission mode
+// Now keeps message box for raw terminal view
 func GetRawTerminalOutput(msg string) string {
-	return removeMessageBox(msg)
+	// return removeMessageBox(msg) // DISABLED: Keep message box for raw terminal view
+	return msg
 }
