@@ -88,15 +88,11 @@ func (s *Server) registerRoutes() {
 		o.Description = "Returns raw terminal output without any processing"
 	})
 
-	// GET /messages - for backward compatibility, also returns raw terminal
-	huma.Get(s.api, "/messages", s.getMessagesCompat, func(o *huma.Operation) {
-		o.Description = "Returns raw terminal output (legacy endpoint)"
-	})
+	// GET /messages - for backward compatibility, returns raw terminal as text/plain
+	s.router.Get("/messages", s.getMessagesPlain)
 
-	// POST /message - send raw input to terminal
-	huma.Post(s.api, "/message", s.sendMessage, func(o *huma.Operation) {
-		o.Description = "Send raw text to the terminal"
-	})
+	// POST /message - send raw input to terminal (with sessionId in query)
+	s.router.Post("/message", s.sendMessageCompat)
 
 	// GET /status - simple health check
 	huma.Get(s.api, "/status", s.getStatus, func(o *huma.Operation) {
@@ -125,16 +121,26 @@ func (s *Server) getTerminal(ctx context.Context, input *struct{}) (*TerminalRes
 	return resp, nil
 }
 
-// getMessagesCompat - legacy endpoint, returns raw terminal
-func (s *Server) getMessagesCompat(ctx context.Context, input *struct{}) (*TerminalResponse, error) {
-	// Just call getTerminal for compatibility
-	return s.getTerminal(ctx, input)
+// getMessagesPlain - legacy endpoint, returns raw terminal as plain text
+func (s *Server) getMessagesPlain(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Get raw screen content from the process
+	rawOutput := s.process.ReadScreen()
+
+	// Return as plain text for backward compatibility with extension
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(rawOutput))
 }
 
-// MessageRequest for sending input
+// MessageRequest for sending input - compatible with old format
 type MessageRequest struct {
 	Body struct {
 		Content string `json:"content" required:"true" description:"Text to send to terminal"`
+		Type    string `json:"type" description:"Message type (user/raw)"`
 	}
 }
 
@@ -145,7 +151,7 @@ type MessageResponse struct {
 	}
 }
 
-// sendMessage sends raw text to terminal
+// sendMessage sends raw text to terminal (Huma version for API docs)
 func (s *Server) sendMessage(ctx context.Context, input *MessageRequest) (*MessageResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -160,6 +166,36 @@ func (s *Server) sendMessage(ctx context.Context, input *MessageRequest) (*Messa
 	resp.Body.Success = true
 
 	return resp, nil
+}
+
+// sendMessageCompat - backward compatible version for extension
+func (s *Server) sendMessageCompat(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Parse JSON body
+	var reqBody struct {
+		Content string `json:"content"`
+		Type    string `json:"type"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Send raw text directly to the process
+	_, err := s.process.Write([]byte(reqBody.Content))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return success response
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 
 // StatusResponse for health check
