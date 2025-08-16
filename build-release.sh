@@ -5,7 +5,7 @@
 echo "Building custom AgentAPI for Claude Code Studio..."
 echo "This build includes PTY with 160 columns width by default"
 
-VERSION="v1.2.0-ccs"
+VERSION="v1.3.0-ccs"
 mkdir -p dist
 
 # macOS Intel
