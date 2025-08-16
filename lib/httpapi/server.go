@@ -6,36 +6,25 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/coder/agentapi/lib/logctx"
-	mf "github.com/coder/agentapi/lib/msgfmt"
-	st "github.com/coder/agentapi/lib/screentracker"
 	"github.com/coder/agentapi/lib/termexec"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
-	"github.com/danielgtaylor/huma/v2/sse"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
-	"golang.org/x/xerrors"
 )
 
-// Server represents the HTTP server
+// Server represents the HTTP server for raw terminal output
 type Server struct {
-	router       chi.Router
-	api          huma.API
-	port         int
-	srv          *http.Server
-	mu           sync.RWMutex
-	logger       *slog.Logger
-	conversation *st.Conversation
-	agentio      *termexec.Process
-	agentType    mf.AgentType
-	emitter      *EventEmitter
-	chatBasePath string
+	router    chi.Router
+	api       huma.API
+	port      int
+	srv       *http.Server
+	mu        sync.RWMutex
+	logger    *slog.Logger
+	process   *termexec.Process
 }
 
 func (s *Server) GetOpenAPI() string {
@@ -55,12 +44,8 @@ func (s *Server) GetOpenAPI() string {
 	return string(prettyJSON)
 }
 
-// That's about 40 frames per second. It's slightly less
-// because the action of taking a snapshot takes time too.
-const snapshotInterval = 25 * time.Millisecond
-
-// NewServer creates a new server instance
-func NewServer(ctx context.Context, agentType mf.AgentType, process *termexec.Process, port int, chatBasePath string) *Server {
+// NewServer creates a new server instance - RAW TERMINAL ONLY
+func NewServer(ctx context.Context, agentType string, process *termexec.Process, port int, chatBasePath string) *Server {
 	router := chi.NewMux()
 
 	corsMiddleware := cors.New(cors.Options{
@@ -69,267 +54,154 @@ func NewServer(ctx context.Context, agentType mf.AgentType, process *termexec.Pr
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
-		MaxAge:           300, // Maximum value not ignored by any of major browsers
+		MaxAge:           300,
 	})
 	router.Use(corsMiddleware.Handler)
 
-	humaConfig := huma.DefaultConfig("AgentAPI", "0.3.2")
-	humaConfig.Info.Description = "HTTP API for Claude Code, Goose, and Aider.\n\nhttps://github.com/coder/agentapi"
+	humaConfig := huma.DefaultConfig("AgentAPI RAW", "1.0.0")
+	humaConfig.Info.Description = "Raw terminal output API - no parsing, no filtering"
 	api := humachi.New(router, humaConfig)
-	formatMessage := func(message string, userInput string) string {
-		return mf.FormatAgentMessage(agentType, message, userInput)
-	}
-	conversation := st.NewConversation(ctx, st.ConversationConfig{
-		AgentIO: process,
-		GetTime: func() time.Time {
-			return time.Now()
-		},
-		SnapshotInterval:      snapshotInterval,
-		ScreenStabilityLength: 2 * time.Second,
-		FormatMessage:         formatMessage,
-	})
-	emitter := NewEventEmitter(1024)
+
 	s := &Server{
-		router:       router,
-		api:          api,
-		port:         port,
-		conversation: conversation,
-		logger:       logctx.From(ctx),
-		agentio:      process,
-		agentType:    agentType,
-		emitter:      emitter,
-		chatBasePath: strings.TrimSuffix(chatBasePath, "/"),
+		router:  router,
+		api:     api,
+		port:    port,
+		logger:  logctx.From(ctx),
+		process: process,
 	}
 
-	// Register API routes
+	// Register only essential routes
 	s.registerRoutes()
 
 	return s
 }
 
-// Handler returns the underlying chi.Router for testing purposes.
+// Handler returns the underlying chi.Router
 func (s *Server) Handler() http.Handler {
 	return s.router
 }
 
-func (s *Server) StartSnapshotLoop(ctx context.Context) {
-	s.conversation.StartSnapshotLoop(ctx)
-	go func() {
-		for {
-			s.emitter.UpdateStatusAndEmitChanges(s.conversation.Status())
-			s.emitter.UpdateMessagesAndEmitChanges(s.conversation.Messages())
-			s.emitter.UpdateScreenAndEmitChanges(s.conversation.Screen())
-			time.Sleep(snapshotInterval)
-		}
-	}()
-}
-
-// registerRoutes sets up all API endpoints
+// registerRoutes sets up only essential endpoints
 func (s *Server) registerRoutes() {
-	// GET /status endpoint
+	// GET /terminal - returns raw terminal output
+	huma.Get(s.api, "/terminal", s.getTerminal, func(o *huma.Operation) {
+		o.Description = "Returns raw terminal output without any processing"
+	})
+
+	// GET /messages - for backward compatibility, also returns raw terminal
+	huma.Get(s.api, "/messages", s.getMessagesCompat, func(o *huma.Operation) {
+		o.Description = "Returns raw terminal output (legacy endpoint)"
+	})
+
+	// POST /message - send raw input to terminal
+	huma.Post(s.api, "/message", s.sendMessage, func(o *huma.Operation) {
+		o.Description = "Send raw text to the terminal"
+	})
+
+	// GET /status - simple health check
 	huma.Get(s.api, "/status", s.getStatus, func(o *huma.Operation) {
-		o.Description = "Returns the current status of the agent."
+		o.Description = "Health check endpoint"
 	})
-
-	// GET /messages endpoint
-	huma.Get(s.api, "/messages", s.getMessages, func(o *huma.Operation) {
-		o.Description = "Returns a list of messages representing the conversation history with the agent."
-	})
-
-	// POST /message endpoint
-	huma.Post(s.api, "/message", s.createMessage, func(o *huma.Operation) {
-		o.Description = "Send a message to the agent. For messages of type 'user', the agent's status must be 'stable' for the operation to complete successfully. Otherwise, this endpoint will return an error."
-	})
-
-	// GET /events endpoint
-	sse.Register(s.api, huma.Operation{
-		OperationID: "subscribeEvents",
-		Method:      http.MethodGet,
-		Path:        "/events",
-		Summary:     "Subscribe to events",
-		Description: "The events are sent as Server-Sent Events (SSE). Initially, the endpoint returns a list of events needed to reconstruct the current state of the conversation and the agent's status. After that, it only returns events that have occurred since the last event was sent.\n\nNote: When an agent is running, the last message in the conversation history is updated frequently, and the endpoint sends a new message update event each time.",
-	}, map[string]any{
-		// Mapping of event type name to Go struct for that event.
-		"message_update": MessageUpdateBody{},
-		"status_change":  StatusChangeBody{},
-	}, s.subscribeEvents)
-
-	sse.Register(s.api, huma.Operation{
-		OperationID: "subscribeScreen",
-		Method:      http.MethodGet,
-		Path:        "/internal/screen",
-		Summary:     "Subscribe to screen",
-		Hidden:      true,
-	}, map[string]any{
-		"screen": ScreenUpdateBody{},
-	}, s.subscribeScreen)
-
-	s.router.Handle("/", http.HandlerFunc(s.redirectToChat))
-
-	// Serve static files for the chat interface under /chat
-	s.registerStaticFileRoutes()
 }
 
-// getStatus handles GET /status
-func (s *Server) getStatus(ctx context.Context, input *struct{}) (*StatusResponse, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	status := s.conversation.Status()
-	agentStatus := convertStatus(status)
-
-	resp := &StatusResponse{}
-	resp.Body.Status = agentStatus
-
-
-	return resp, nil
-}
-
-// getMessages handles GET /messages
-func (s *Server) getMessages(ctx context.Context, input *struct{}) (*MessagesResponse, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	resp := &MessagesResponse{}
-	resp.Body.Messages = make([]Message, len(s.conversation.Messages()))
-	for i, msg := range s.conversation.Messages() {
-		resp.Body.Messages[i] = Message{
-			Id:      msg.Id,
-			Role:    msg.Role,
-			Content: msg.Message,
-			Time:    msg.Time,
-		}
+// TerminalResponse is the response for terminal output
+type TerminalResponse struct {
+	Body struct {
+		Content string `json:"content" description:"Raw terminal output"`
 	}
+}
 
+// getTerminal returns raw terminal output
+func (s *Server) getTerminal(ctx context.Context, input *struct{}) (*TerminalResponse, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Get raw screen content from the process
+	rawOutput := s.process.ReadScreen()
+
+	resp := &TerminalResponse{}
+	resp.Body.Content = rawOutput
 
 	return resp, nil
 }
 
-// createMessage handles POST /message
-func (s *Server) createMessage(ctx context.Context, input *MessageRequest) (*MessageResponse, error) {
+// getMessagesCompat - legacy endpoint, returns raw terminal
+func (s *Server) getMessagesCompat(ctx context.Context, input *struct{}) (*TerminalResponse, error) {
+	// Just call getTerminal for compatibility
+	return s.getTerminal(ctx, input)
+}
+
+// MessageRequest for sending input
+type MessageRequest struct {
+	Body struct {
+		Content string `json:"content" required:"true" description:"Text to send to terminal"`
+	}
+}
+
+// MessageResponse
+type MessageResponse struct {
+	Body struct {
+		Success bool `json:"success"`
+	}
+}
+
+// sendMessage sends raw text to terminal
+func (s *Server) sendMessage(ctx context.Context, input *MessageRequest) (*MessageResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	switch input.Body.Type {
-	case MessageTypeUser:
-		if err := s.conversation.SendMessage(FormatMessage(s.agentType, input.Body.Content)...); err != nil {
-			return nil, xerrors.Errorf("failed to send message: %w", err)
-		}
-	case MessageTypeRaw:
-		if _, err := s.agentio.Write([]byte(input.Body.Content)); err != nil {
-			return nil, xerrors.Errorf("failed to send message: %w", err)
-		}
+	// Send raw text directly to the process
+	_, err := s.process.Write([]byte(input.Body.Content))
+	if err != nil {
+		return nil, err
 	}
 
 	resp := &MessageResponse{}
-	resp.Body.Ok = true
+	resp.Body.Success = true
 
 	return resp, nil
 }
 
-// subscribeEvents is an SSE endpoint that sends events to the client
-func (s *Server) subscribeEvents(ctx context.Context, input *struct{}, send sse.Sender) {
-	subscriberId, ch, stateEvents := s.emitter.Subscribe()
-	defer s.emitter.Unsubscribe(subscriberId)
-	s.logger.Info("New subscriber", "subscriberId", subscriberId)
-	for _, event := range stateEvents {
-		if event.Type == EventTypeScreenUpdate {
-			continue
-		}
-		if err := send.Data(event.Payload); err != nil {
-			s.logger.Error("Failed to send event", "subscriberId", subscriberId, "error", err)
-			return
-		}
-	}
-	for {
-		select {
-		case event, ok := <-ch:
-			if !ok {
-				s.logger.Info("Channel closed", "subscriberId", subscriberId)
-				return
-			}
-			if event.Type == EventTypeScreenUpdate {
-				continue
-			}
-			if err := send.Data(event.Payload); err != nil {
-				s.logger.Error("Failed to send event", "subscriberId", subscriberId, "error", err)
-				return
-			}
-		case <-ctx.Done():
-			s.logger.Info("Context done", "subscriberId", subscriberId)
-			return
-		}
+// StatusResponse for health check
+type StatusResponse struct {
+	Body struct {
+		Status string `json:"status"`
 	}
 }
 
-func (s *Server) subscribeScreen(ctx context.Context, input *struct{}, send sse.Sender) {
-	subscriberId, ch, stateEvents := s.emitter.Subscribe()
-	defer s.emitter.Unsubscribe(subscriberId)
-	s.logger.Info("New screen subscriber", "subscriberId", subscriberId)
-	for _, event := range stateEvents {
-		if event.Type != EventTypeScreenUpdate {
-			continue
-		}
-		if err := send.Data(event.Payload); err != nil {
-			s.logger.Error("Failed to send screen event", "subscriberId", subscriberId, "error", err)
-			return
-		}
-	}
-	for {
-		select {
-		case event, ok := <-ch:
-			if !ok {
-				s.logger.Info("Screen channel closed", "subscriberId", subscriberId)
-				return
-			}
-			if event.Type != EventTypeScreenUpdate {
-				continue
-			}
-			if err := send.Data(event.Payload); err != nil {
-				s.logger.Error("Failed to send screen event", "subscriberId", subscriberId, "error", err)
-				return
-			}
-		case <-ctx.Done():
-			s.logger.Info("Screen context done", "subscriberId", subscriberId)
-			return
-		}
-	}
+// getStatus returns simple status
+func (s *Server) getStatus(ctx context.Context, input *struct{}) (*StatusResponse, error) {
+	resp := &StatusResponse{}
+	resp.Body.Status = "running"
+	return resp, nil
 }
 
 // Start starts the HTTP server
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	addr := fmt.Sprintf(":%d", s.port)
 	s.srv = &http.Server{
 		Addr:    addr,
 		Handler: s.router,
 	}
 
-	return s.srv.ListenAndServe()
+	s.logger.Info("starting raw terminal server", "address", s.srv.Addr)
+
+	go func() {
+		<-ctx.Done()
+		_ = s.srv.Shutdown(context.Background())
+	}()
+
+	if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+
+	return nil
 }
 
-// Stop gracefully stops the HTTP server
+// Stop stops the HTTP server
 func (s *Server) Stop(ctx context.Context) error {
 	if s.srv != nil {
 		return s.srv.Shutdown(ctx)
 	}
 	return nil
-}
-
-// registerStaticFileRoutes sets up routes for serving static files
-func (s *Server) registerStaticFileRoutes() {
-	chatHandler := FileServerWithIndexFallback(s.chatBasePath)
-
-	// Mount the file server at /chat
-	s.router.Handle("/chat", http.StripPrefix("/chat", chatHandler))
-	s.router.Handle("/chat/*", http.StripPrefix("/chat", chatHandler))
-}
-
-func (s *Server) redirectToChat(w http.ResponseWriter, r *http.Request) {
-	rdir, err := url.JoinPath(s.chatBasePath, "embed")
-	if err != nil {
-		s.logger.Error("Failed to construct redirect URL", "error", err)
-		http.Error(w, "Failed to redirect", http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, rdir, http.StatusTemporaryRedirect)
 }

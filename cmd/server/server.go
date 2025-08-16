@@ -15,7 +15,6 @@ import (
 
 	"github.com/coder/agentapi/lib/httpapi"
 	"github.com/coder/agentapi/lib/logctx"
-	"github.com/coder/agentapi/lib/msgfmt"
 	"github.com/coder/agentapi/lib/termexec"
 )
 
@@ -28,15 +27,15 @@ var (
 	termHeight   uint16
 )
 
-type AgentType = msgfmt.AgentType
+type AgentType = string
 
 const (
-	AgentTypeClaude AgentType = msgfmt.AgentTypeClaude
-	AgentTypeGoose  AgentType = msgfmt.AgentTypeGoose
-	AgentTypeAider  AgentType = msgfmt.AgentTypeAider
-	AgentTypeCodex  AgentType = msgfmt.AgentTypeCodex
-	AgentTypeGemini AgentType = msgfmt.AgentTypeGemini
-	AgentTypeCustom AgentType = msgfmt.AgentTypeCustom
+	AgentTypeClaude AgentType = "claude"
+	AgentTypeGoose  AgentType = "goose"
+	AgentTypeAider  AgentType = "aider"
+	AgentTypeCodex  AgentType = "codex"
+	AgentTypeGemini AgentType = "gemini"
+	AgentTypeCustom AgentType = "custom"
 )
 
 // exhaustiveness of this map is checked by the exhaustive linter
@@ -97,12 +96,11 @@ func runServer(ctx context.Context, logger *slog.Logger, argsToPass []string) er
 			return xerrors.Errorf("failed to setup process: %w", err)
 		}
 	}
-	srv := httpapi.NewServer(ctx, agentType, process, port, chatBasePath)
+	srv := httpapi.NewServer(ctx, string(agentType), process, port, chatBasePath)
 	if printOpenAPI {
 		fmt.Println(srv.GetOpenAPI())
 		return nil
 	}
-	srv.StartSnapshotLoop(ctx)
 	logger.Info("Starting server on port", "port", port)
 	processExitCh := make(chan error, 1)
 	go func() {
@@ -118,7 +116,7 @@ func runServer(ctx context.Context, logger *slog.Logger, argsToPass []string) er
 			logger.Error("Failed to stop server", "error", err)
 		}
 	}()
-	if err := srv.Start(); err != nil && err != context.Canceled && err != http.ErrServerClosed {
+	if err := srv.Start(ctx); err != nil && err != context.Canceled && err != http.ErrServerClosed {
 		return xerrors.Errorf("failed to start server: %w", err)
 	}
 	select {

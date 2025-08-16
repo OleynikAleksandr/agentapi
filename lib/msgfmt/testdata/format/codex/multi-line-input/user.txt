@@ -1,4 +1,0 @@
-Which file is this function from?
-```go
-func formatCodexMessage(message string, userInput string) string {}
-```
