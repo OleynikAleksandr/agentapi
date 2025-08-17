@@ -1,20 +1,20 @@
-CHAT_SOURCES_STAMP = chat/.sources.stamp
-CHAT_SOURCES = $(shell find chat \( -path chat/node_modules -o -path chat/out -o -path chat/.next \) -prune -o -not -path chat/.sources.stamp -type f -print)
 BINPATH ?= out/agentapi
-# This must be kept in sync with the magicBasePath in lib/httpapi/embed.go.
-BASE_PATH ?= /magic-base-path-placeholder
 
-$(CHAT_SOURCES_STAMP): $(CHAT_SOURCES)
-	@echo "Chat sources changed. Running build steps..."
-	cd chat && NEXT_PUBLIC_BASE_PATH="${BASE_PATH}" bun run build
-	rm -rf lib/httpapi/chat && mkdir -p lib/httpapi/chat && touch lib/httpapi/chat/marker
-	cp -r chat/out/. lib/httpapi/chat/
-	touch $@
-
-.PHONY: embed
-embed: $(CHAT_SOURCES_STAMP)
-	@echo "Chat build is up to date."
-
+# WebUI removed - no chat build needed
 .PHONY: build
-build: embed
+build:
+	@echo "Building agentapi without WebUI..."
 	go build -o ${BINPATH} main.go
+
+.PHONY: clean
+clean:
+	rm -rf out/
+
+.PHONY: build-all
+build-all:
+	@echo "Building for all platforms..."
+	GOOS=darwin GOARCH=amd64 go build -o out/agentapi-darwin-amd64 main.go
+	GOOS=darwin GOARCH=arm64 go build -o out/agentapi-darwin-arm64 main.go
+	GOOS=linux GOARCH=amd64 go build -o out/agentapi-linux-amd64 main.go
+	GOOS=linux GOARCH=arm64 go build -o out/agentapi-linux-arm64 main.go
+	GOOS=windows GOARCH=amd64 go build -o out/agentapi-windows-amd64.exe main.go

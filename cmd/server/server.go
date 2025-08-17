@@ -99,7 +99,7 @@ func runServer(ctx context.Context, logger *slog.Logger, argsToPass []string) er
 		AgentType:    agentType,
 		Process:      process,
 		Port:         port,
-		ChatBasePath: viper.GetString(FlagChatBasePath),
+		// ChatBasePath removed - no WebUI
 	})
 	if printOpenAPI {
 		fmt.Println(srv.GetOpenAPI())
@@ -153,7 +153,7 @@ const (
 	FlagType         = "type"
 	FlagPort         = "port"
 	FlagPrintOpenAPI = "print-openapi"
-	FlagChatBasePath = "chat-base-path"
+	// FlagChatBasePath = "chat-base-path" // removed - no WebUI
 	FlagTermWidth    = "term-width"
 	FlagTermHeight   = "term-height"
 )
@@ -178,7 +178,7 @@ func CreateServerCmd() *cobra.Command {
 		{FlagType, "t", "", fmt.Sprintf("Override the agent type (one of: %s, custom)", strings.Join(agentNames, ", ")), "string"},
 		{FlagPort, "p", 3284, "Port to run the server on", "int"},
 		{FlagPrintOpenAPI, "P", false, "Print the OpenAPI schema to stdout and exit", "bool"},
-		{FlagChatBasePath, "c", "/chat", "Base path for assets and routes used in the static files of the chat interface", "string"},
+		// {FlagChatBasePath, "c", "/chat", "Base path for assets and routes used in the static files of the chat interface", "string"}, // removed - no WebUI
 		{FlagTermWidth, "W", uint16(80), "Width of the emulated terminal", "uint16"},
 		{FlagTermHeight, "H", uint16(1000), "Height of the emulated terminal", "uint16"},
 	}

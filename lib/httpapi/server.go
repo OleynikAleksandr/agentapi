@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strings"
+	// "net/url" // removed - was used for WebUI
+	// "strings" // removed - was used for WebUI
 	"sync"
 	"time"
 
@@ -35,7 +35,7 @@ type Server struct {
 	agentio      *termexec.Process
 	agentType    mf.AgentType
 	emitter      *EventEmitter
-	chatBasePath string
+	// chatBasePath string // removed - no WebUI
 }
 
 func (s *Server) GetOpenAPI() string {
@@ -63,7 +63,7 @@ type ServerConfig struct {
 	AgentType    mf.AgentType
 	Process      *termexec.Process
 	Port         int
-	ChatBasePath string
+	// ChatBasePath string // removed - no WebUI
 }
 
 // NewServer creates a new server instance
@@ -105,7 +105,7 @@ func NewServer(ctx context.Context, config ServerConfig) *Server {
 		agentio:      config.Process,
 		agentType:    config.AgentType,
 		emitter:      emitter,
-		chatBasePath: strings.TrimSuffix(config.ChatBasePath, "/"),
+		// chatBasePath: strings.TrimSuffix(config.ChatBasePath, "/"), // removed - no WebUI
 	}
 
 	// Register API routes
@@ -171,10 +171,9 @@ func (s *Server) registerRoutes() {
 		"screen": ScreenUpdateBody{},
 	}, s.subscribeScreen)
 
-	s.router.Handle("/", http.HandlerFunc(s.redirectToChat))
-
-	// Serve static files for the chat interface under /chat
-	s.registerStaticFileRoutes()
+	// WebUI removed - no redirect to chat
+	// s.router.Handle("/", http.HandlerFunc(s.redirectToChat))
+	// s.registerStaticFileRoutes()
 }
 
 // getStatus handles GET /status
@@ -320,11 +319,10 @@ func (s *Server) Stop(ctx context.Context) error {
 	return nil
 }
 
-// registerStaticFileRoutes sets up routes for serving static files
+// WebUI removed - these functions are no longer needed
+/*
 func (s *Server) registerStaticFileRoutes() {
 	chatHandler := FileServerWithIndexFallback(s.chatBasePath)
-
-	// Mount the file server at /chat
 	s.router.Handle("/chat", http.StripPrefix("/chat", chatHandler))
 	s.router.Handle("/chat/*", http.StripPrefix("/chat", chatHandler))
 }
@@ -338,3 +336,4 @@ func (s *Server) redirectToChat(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, rdir, http.StatusTemporaryRedirect)
 }
+*/
