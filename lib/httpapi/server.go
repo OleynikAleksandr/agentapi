@@ -80,7 +80,7 @@ func NewServer(ctx context.Context, config ServerConfig) *Server {
 	})
 	router.Use(corsMiddleware.Handler)
 
-	humaConfig := huma.DefaultConfig("AgentAPI", "0.3.3")
+	humaConfig := huma.DefaultConfig("AgentAPI", "v1.5.0")
 	humaConfig.Info.Description = "HTTP API for Claude Code, Goose, and Aider.\n\nhttps://github.com/coder/agentapi"
 	api := humachi.New(router, humaConfig)
 	formatMessage := func(message string, userInput string) string {

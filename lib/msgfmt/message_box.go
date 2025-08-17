@@ -9,16 +9,25 @@ import (
 // >
 // ───────────────
 // Used by Claude Code, Goose, and Aider.
-func findGreaterThanMessageBox(lines []string) int {
-	for i := len(lines) - 1; i >= max(len(lines)-6, 0); i-- {
-		if strings.Contains(lines[i], ">") {
-			if i > 0 && strings.Contains(lines[i-1], "───────────────") {
-				return i - 1
+// Returns the start index and end index of the message box (inclusive)
+func findGreaterThanMessageBox(lines []string) (int, int) {
+	// Look for the pattern from the end of the output
+	for i := len(lines) - 1; i >= max(len(lines)-10, 0); i-- {
+		// Check if this line contains only ">" (the input prompt)
+		if strings.TrimSpace(lines[i]) == ">" {
+			// Check if there's a border above and below
+			if i > 0 && i < len(lines)-1 {
+				above := lines[i-1]
+				below := lines[i+1]
+				// Both lines should contain the border pattern
+				if strings.Contains(above, "───") && strings.Contains(below, "───") {
+					// Found complete message box, return start and end indices
+					return i - 1, i + 1
+				}
 			}
-			return i
 		}
 	}
-	return -1
+	return -1, -1
 }
 
 // Usually something like
@@ -26,27 +35,46 @@ func findGreaterThanMessageBox(lines []string) int {
 // |
 // ───────────────
 // Used by OpenAI Codex.
-func findGenericSlimMessageBox(lines []string) int {
-	for i := len(lines) - 3; i >= max(len(lines)-9, 0); i-- {
+// Returns the start index and end index of the message box (inclusive)
+func findGenericSlimMessageBox(lines []string) (int, int) {
+	for i := len(lines) - 3; i >= max(len(lines)-10, 0); i-- {
 		if strings.Contains(lines[i], "───────────────") &&
 			(strings.Contains(lines[i+1], "|") || strings.Contains(lines[i+1], "│")) &&
 			strings.Contains(lines[i+2], "───────────────") {
-			return i
+			// Found complete message box, return start and end indices
+			return i, i + 2
 		}
 	}
-	return -1
+	return -1, -1
 }
 
 func removeMessageBox(msg string) string {
 	lines := strings.Split(msg, "\n")
 
-	messageBoxStartIdx := findGreaterThanMessageBox(lines)
-	if messageBoxStartIdx == -1 {
-		messageBoxStartIdx = findGenericSlimMessageBox(lines)
+	// Try to find Claude/Goose/Aider style message box
+	startIdx, endIdx := findGreaterThanMessageBox(lines)
+	
+	// If not found, try Codex style
+	if startIdx == -1 {
+		startIdx, endIdx = findGenericSlimMessageBox(lines)
 	}
 
-	if messageBoxStartIdx != -1 {
-		lines = lines[:messageBoxStartIdx]
+	// If we found a message box, remove only those lines
+	if startIdx != -1 && endIdx != -1 {
+		// Create new slice without the message box lines
+		newLines := []string{}
+		
+		// Add all lines before the message box
+		if startIdx > 0 {
+			newLines = append(newLines, lines[:startIdx]...)
+		}
+		
+		// Add all lines after the message box
+		if endIdx < len(lines)-1 {
+			newLines = append(newLines, lines[endIdx+1:]...)
+		}
+		
+		lines = newLines
 	}
 
 	return strings.Join(lines, "\n")
