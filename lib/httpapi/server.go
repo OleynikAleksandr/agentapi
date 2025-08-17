@@ -35,6 +35,9 @@ type Server struct {
 	agentio      *termexec.Process
 	agentType    mf.AgentType
 	emitter      *EventEmitter
+	splitter     *mf.ServiceSplitter
+	// Store last sent chat content for delta calculation
+	lastSentChat string
 	// chatBasePath string // removed - no WebUI
 }
 
@@ -80,7 +83,7 @@ func NewServer(ctx context.Context, config ServerConfig) *Server {
 	})
 	router.Use(corsMiddleware.Handler)
 
-	humaConfig := huma.DefaultConfig("AgentAPI", "v1.5.0")
+	humaConfig := huma.DefaultConfig("AgentAPI", "v1.6.0")
 	humaConfig.Info.Description = "HTTP API for Claude Code, Goose, and Aider.\n\nhttps://github.com/coder/agentapi"
 	api := humachi.New(router, humaConfig)
 	formatMessage := func(message string, userInput string) string {
@@ -105,6 +108,8 @@ func NewServer(ctx context.Context, config ServerConfig) *Server {
 		agentio:      config.Process,
 		agentType:    config.AgentType,
 		emitter:      emitter,
+		splitter:     mf.NewServiceSplitter(),
+		lastSentChat: "",
 		// chatBasePath: strings.TrimSuffix(config.ChatBasePath, "/"), // removed - no WebUI
 	}
 
@@ -141,6 +146,16 @@ func (s *Server) registerRoutes() {
 	// GET /messages endpoint
 	huma.Get(s.api, "/messages", s.getMessages, func(o *huma.Operation) {
 		o.Description = "Returns a list of messages representing the conversation history with the agent."
+	})
+
+	// GET /service-info endpoint
+	huma.Get(s.api, "/service-info", s.getServiceInfo, func(o *huma.Operation) {
+		o.Description = "Returns service information lines (model, permissions, cooking status, etc.)"
+	})
+
+	// GET /messages/delta endpoint
+	huma.Get(s.api, "/messages/delta", s.getMessagesDelta, func(o *huma.Operation) {
+		o.Description = "Returns only new chat messages since last request (delta)"
 	})
 
 	// POST /message endpoint
@@ -206,6 +221,67 @@ func (s *Server) getMessages(ctx context.Context, input *struct{}) (*MessagesRes
 		}
 	}
 
+	return resp, nil
+}
+
+// ServiceInfoResponse is the response for GET /service-info
+type ServiceInfoResponse struct {
+	Body struct {
+		ServiceInfo string `json:"service_info" doc:"Service information lines (model, permissions, cooking status, etc.)"`
+	}
+}
+
+// getServiceInfo handles GET /service-info
+func (s *Server) getServiceInfo(ctx context.Context, input *struct{}) (*ServiceInfoResponse, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Get current terminal screen
+	screen := s.conversation.Screen()
+	
+	// Split into chat and service lines
+	_, serviceLines := s.splitter.SplitOutput(screen)
+	
+	// Format service lines
+	serviceInfo := s.splitter.GetServiceInfo(serviceLines)
+	
+	resp := &ServiceInfoResponse{}
+	resp.Body.ServiceInfo = serviceInfo
+	
+	return resp, nil
+}
+
+// MessagesDeltaResponse is the response for GET /messages/delta
+type MessagesDeltaResponse struct {
+	Body struct {
+		Delta string `json:"delta" doc:"New chat content since last request"`
+	}
+}
+
+// getMessagesDelta handles GET /messages/delta
+func (s *Server) getMessagesDelta(ctx context.Context, input *struct{}) (*MessagesDeltaResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Get current terminal screen
+	screen := s.conversation.Screen()
+	
+	// Split into chat and service lines (ignore service lines for delta)
+	chatContent, _ := s.splitter.SplitOutput(screen)
+	
+	// Calculate delta
+	delta := ""
+	if len(chatContent) > len(s.lastSentChat) {
+		// We have new content
+		delta = chatContent[len(s.lastSentChat):]
+	}
+	
+	// Update last sent state
+	s.lastSentChat = chatContent
+	
+	resp := &MessagesDeltaResponse{}
+	resp.Body.Delta = delta
+	
 	return resp, nil
 }
 

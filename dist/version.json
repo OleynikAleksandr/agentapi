@@ -1,0 +1,10 @@
+{
+  "version": "v1.6.0",
+  "date": "2025-08-17",
+  "changes": [
+    "Added /service-info endpoint for service information lines",
+    "Added /messages/delta endpoint for incremental chat updates",
+    "Added ServiceSplitter for separating chat and service content",
+    "Added Cooking Status pattern detection"
+  ]
+}
