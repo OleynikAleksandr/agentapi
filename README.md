@@ -14,7 +14,7 @@ You can use AgentAPI:
 
 ## Quickstart
 
-1. Install `agentapi` by downloading the latest release binary from the [releases page](https://github.com/coder/agentapi/releases).
+1. Install `agentapi` by downloading the latest release binary from the [releases page](https://github.com/OleynikAleksandr/agentapi/releases).
 
 1. Verify the installation:
 
